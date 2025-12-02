@@ -7,7 +7,7 @@ import bpy
 from bpy.props import BoolProperty, CollectionProperty, StringProperty  # type: ignore
 from bpy.types import AddonPreferences, PropertyGroup, UIList
 from bpy.utils import register_class, unregister_class
-from . import PACKAGE
+from .utils import PACKAGE
 
 if TYPE_CHECKING:
     from bpy.types import Context, bpy_prop_collection_idprop, UILayout

@@ -5,7 +5,7 @@ __all__ = ["register", "unregister"]
 from typing import TYPE_CHECKING
 from bpy.types import Panel
 from bpy.utils import register_class, unregister_class
-from .. import ADDON_LABEL
+from ..utils import ADDON_LABEL
 from ..utils.nodes import get_node_tree
 from ..utils.preferences import get_preferences
 from .menus import OperatorMenu

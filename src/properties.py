@@ -7,7 +7,7 @@ from bpy.types import NodeTree, PropertyGroup
 from bpy.props import PointerProperty, IntProperty  # type: ignore
 from bpy.utils import register_class, unregister_class
 from types import MappingProxyType
-from . import CUSTOM_PROPS_NAME
+from .utils import CUSTOM_PROPS_NAME
 
 if TYPE_CHECKING:
     from bpy.types import ID

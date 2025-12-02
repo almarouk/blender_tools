@@ -5,7 +5,7 @@ __all__ = ["RandomizeSeed"]
 from typing import TYPE_CHECKING
 from ..utils.handlers import BaseNodeTreeHandler
 from ..utils.nodes import is_socket_hidden, get_socket_location
-from ..utils.properties import get_custom_properties
+from ..properties import get_custom_properties
 
 if TYPE_CHECKING:
     from bpy.types import (

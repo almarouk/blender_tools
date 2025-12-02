@@ -4,7 +4,7 @@ __all__ = ["get_preferences"]
 
 from typing import TYPE_CHECKING, cast
 import bpy
-from .. import PACKAGE
+from . import PACKAGE
 
 if TYPE_CHECKING:
     from bpy.types import Context

@@ -10,7 +10,7 @@ from functools import partial
 from bpy.app.handlers import persistent, depsgraph_update_post
 from bpy.app.timers import register as register_timer
 from .operators import classes
-from . import utils
+from .utils import preferences, operators, handlers
 
 if TYPE_CHECKING:
     from bpy.types import Depsgraph, Scene
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 def call_operators(updated_trees: list[str]) -> None:
     global handler_operators
-    prefs = utils.preferences.get_preferences()
+    prefs = preferences.get_preferences()
     if not prefs:
         return
     active_handlers = prefs.get_active_handlers()
@@ -32,7 +32,7 @@ def call_operators(updated_trees: list[str]) -> None:
         if cls.bl_idname in active_handlers:
             for node_tree_name in updated_trees:
                 if cls.poll_node_tree(node_tree_name):
-                    op = utils.operators.get_operator_func(cls.bl_idname)
+                    op = operators.get_operator_func(cls.bl_idname)
                     op(node_tree_name=node_tree_name)
 
 
@@ -52,13 +52,13 @@ def depsgraph_handler(scene: Scene, depsgraph: Depsgraph) -> None:
         first_interval=0.3,
     )
 
-handler_operators: tuple[type[utils.handlers.BaseNodeTreeHandler], ...] = {
-    cls for cls in classes if utils.handlers.is_handler_operator(cls)
+handler_operators: tuple[type[handlers.BaseNodeTreeHandler], ...] = {
+    cls for cls in classes if handlers.is_handler_operator(cls)
 }  # type: ignore
 
 
 def register():
-    prefs = utils.preferences.get_preferences()
+    prefs = preferences.get_preferences()
     if not prefs:
         return
     prefs.register_handlers(handler_operators)

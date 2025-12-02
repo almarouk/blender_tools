@@ -81,7 +81,8 @@ def copy_socket_properties(
     attrs = ["default_value", "min_value", "max_value", "subtype", "dimensions"]
     for attr in attrs:
         if hasattr(target, attr) and hasattr(source, attr):
-            setattr(target, attr, getattr(source, attr))
+            if getattr(target, attr) is type(getattr(source, attr)):
+                setattr(target, attr, getattr(source, attr))
 
 def is_panel_empty(panel: _NodeTreeInterfacePanel) -> bool:
     for item in panel.interface_items:

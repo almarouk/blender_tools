@@ -115,8 +115,8 @@ class RandomizeSeed(BaseNodeTreeHandler):
             location = get_socket_location(to_socket, True)
             if location is None:
                 location = (
-                    to_node.location.x,
-                    to_node.location.y,
+                    to_node.location_absolute.x,
+                    to_node.location_absolute.y,
                 )
             random_node.location = (
                 location[0] - random_node.width - 25,

@@ -4,7 +4,7 @@ __all__ = ["MatchGroupInterface"]
 
 from typing import cast, TYPE_CHECKING, Iterable
 from ..utils.operators import BaseOperator
-from ..utils.nodes import get_node_tree, get_selected_nodes
+from ..utils.nodes import get_editable_node_tree, get_selected_nodes
 
 if TYPE_CHECKING:
     from bpy.types import (
@@ -111,7 +111,7 @@ class MatchGroupInterface(BaseOperator):
             return result
 
     def _execute(self, context: Context):
-        node_tree = get_node_tree(context)
+        node_tree = get_editable_node_tree(context=context)
         if isinstance(node_tree, str):
             return node_tree
         nodes = get_nodes(context)

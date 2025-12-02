@@ -2,10 +2,9 @@ from __future__ import annotations
 
 __all__ = ["BaseNodeTreeHandler", "is_handler_operator"]
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from abc import abstractmethod
-import bpy
-from .nodes import get_node_tree
+from .nodes import get_editable_node_tree
 from .operators import BaseOperator
 from bpy.props import StringProperty  # type: ignore
 
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
 
 def is_handler_operator(cls: type[BaseOperator]) -> bool:
     return issubclass(cls, BaseNodeTreeHandler)
+
 
 class BaseNodeTreeHandler(BaseOperator):
     node_tree_name: StringProperty(  # type: ignore
@@ -36,13 +36,10 @@ class BaseNodeTreeHandler(BaseOperator):
 
     @classmethod
     def poll_node_tree(cls, node_tree_name: str) -> bool:
-        node_tree = bpy.data.node_groups.get(
-            node_tree_name, f"Node tree '{node_tree_name}' not found."
+        node_tree = get_editable_node_tree(name=node_tree_name)
+        msg = (
+            node_tree if isinstance(node_tree, str) else cls._poll_node_tree(node_tree)
         )
-        if isinstance(node_tree, str):
-            msg = node_tree
-        else:
-            msg = cls._poll_node_tree(node_tree)
         if isinstance(msg, str):
             cls.poll_message_set(msg)
             return False
@@ -60,17 +57,13 @@ class BaseNodeTreeHandler(BaseOperator):
 
     def _execute(self, context: Context):
         if self.node_tree_name:
-            node_tree = bpy.data.node_groups.get(
-                self.node_tree_name, f"Node tree '{self.node_tree_name}' not found."
-            )
+            node_tree = get_editable_node_tree(name=self.node_tree_name)
         else:
-            node_tree = get_node_tree(context)
-        if isinstance(node_tree, str):
-            msg = node_tree
-        else:
-            msg = self._poll_node_tree(node_tree)
+            node_tree = get_editable_node_tree(context=context)
+        msg = (
+            node_tree if isinstance(node_tree, str) else self._poll_node_tree(node_tree)
+        )
         if isinstance(msg, str):
             self.poll_message_set(msg)
             return msg
-
-        return self._execute_node_tree(node_tree)
+        self._execute_node_tree(cast("NodeTree", node_tree))

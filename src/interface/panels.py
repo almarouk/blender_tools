@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from bpy.types import Panel
 from bpy.utils import register_class, unregister_class
 from ..utils import ADDON_LABEL
-from ..utils.nodes import get_node_tree
+from ..utils.nodes import get_editable_node_tree
 from ..utils.preferences import get_preferences
 from .menus import OperatorMenu
 
@@ -20,7 +20,7 @@ class PanelBase(Panel):
     bl_category = ADDON_LABEL
     @classmethod
     def poll(cls, context: Context) -> bool:
-        node_tree = get_node_tree(context)
+        node_tree = get_editable_node_tree(context=context)
         return not isinstance(node_tree, str)
 
 

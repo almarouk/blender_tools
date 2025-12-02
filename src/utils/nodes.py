@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
-    "get_node_tree",
+    "get_editable_node_tree",
     "get_selected_nodes",
     "find_common_parent",
     "get_socket_location",
@@ -12,7 +12,16 @@ from typing import TYPE_CHECKING, cast, Iterable
 import bpy
 
 if TYPE_CHECKING:
-    from bpy.types import Node, NodeSocket, Context, SpaceNodeEditor, NodeTree
+    from bpy.types import (
+        Node,
+        NodeSocket,
+        Context,
+        SpaceNodeEditor,
+        NodeTree,
+        Preferences,
+        Library,
+        Nodes,
+    )
 
 
 # Code for node socket location adapted from: https://blender.stackexchange.com/a/252856/248376
@@ -56,7 +65,7 @@ def get_socket_location(
         return True
 
     node = cast("Node", socket.node)
-    scale = bpy.context.preferences.system.ui_scale
+    scale = cast("Preferences", bpy.context.preferences).system.ui_scale
     try:
         if node.hide:
             return None
@@ -90,25 +99,36 @@ def get_socket_location(
         print(f"Error getting socket location: {e}")
         return None
 
+def get_editable_node_tree(
+    context: Context | None = None, name: str | None = None
+) -> NodeTree | str:
+    if context is not None:
+        # Check space type
+        space = context.space_data
+        if space is None:
+            return "No active space found."
+        if space.type != "NODE_EDITOR":
+            return "Current editor is not a node editor."
+        space = cast("SpaceNodeEditor", space)
 
-def get_node_tree(context: Context) -> NodeTree | str:
-    # Check space type
-    space = context.space_data
-    if space is None:
-        return "No active space found."
-    if space.type != "NODE_EDITOR":
-        return "Current editor is not a node editor."
-    space = cast("SpaceNodeEditor", space)
+        # Check node tree is editable and has nodes
+        node_tree = space.edit_tree
+        if node_tree is None:
+            return "No node tree was found in the current node editor."
+    elif name is not None:
+        node_tree = bpy.data.node_groups.get(name, None)
+        if node_tree is None:
+            return f"Node tree '{name}' not found."
+    else:
+        return "Cannot find node tree."
 
-    # Check node tree is editable and has nodes
-    if space.node_tree is None:
-        return "No node tree was found in the current node editor."
-    if space.node_tree.library is not None:
+    if not node_tree.is_editable:
+        return "Current node tree is not editable."
+    if cast("Library | None", node_tree.library) is not None:
         return (
             "Current node tree is linked from another .blend file and cannot be edited."
         )
-    node_tree = space.edit_tree
-    if node_tree is None or node_tree.nodes is None:
+    if cast("Nodes | None", node_tree.nodes) is None:
         return "Current node tree does not contain any nodes."
 
     return node_tree
@@ -118,7 +138,7 @@ def get_selected_nodes(
     context: Context,
     node_type: str | list[str] | None = None,
 ) -> list[Node] | str:
-    node_tree = get_node_tree(context)
+    node_tree = get_editable_node_tree(context=context)
     if isinstance(node_tree, str):
         return node_tree
 

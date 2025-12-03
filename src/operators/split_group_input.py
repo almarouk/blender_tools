@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 class Mode(StrEnum):
-    LINK = auto()
+    SPLIT_ALL = auto()
     DEST_NODE = auto()
     SOURCE_SOCKET = auto()
     MERGE_ALL = auto()
@@ -60,7 +60,7 @@ class SplitMergeGroupInput(BaseOperator):
         name="Mode",
         description="How to split/merge the Group Input nodes",
         items=[
-            (Mode.LINK, "Link", "Create one Group Input node per link"),
+            (Mode.SPLIT_ALL, "Split All", "Create one Group Input node per link"),
             (
                 Mode.DEST_NODE,
                 "Destination Node",
@@ -77,7 +77,7 @@ class SplitMergeGroupInput(BaseOperator):
                 "Merge all selected Group Input nodes into one",
             ),
         ],
-        default=Mode.LINK,
+        default=Mode.SPLIT_ALL,
     )
 
     @classmethod
@@ -170,7 +170,7 @@ class SplitMergeGroupInput(BaseOperator):
                 location = group.location
                 parent = location.parent if location else None
                 location = cast("Location", location)
-                if self.mode != Mode.LINK:  # type: ignore
+                if self.mode != Mode.SPLIT_ALL:  # type: ignore
                     connected_nodes: set[Node] = {
                         link.to_node for _, link in group.links
                     }  # type: ignore
@@ -195,12 +195,12 @@ class SplitMergeGroupInput(BaseOperator):
                 for socket_index, link in group.links:
                     if not link.to_node:
                         continue
-                    if not new_node or self.mode == Mode.LINK:  # type: ignore
+                    if not new_node or self.mode == Mode.SPLIT_ALL:  # type: ignore
                         # Create a new Group Input node
                         new_node = node_tree.nodes.new(type=node_type)
                         # new_node.hide = self.mode == Mode.LINK or len(group.links) == 1
                         new_node.hide = True
-                        if self.mode == Mode.LINK:  # type: ignore
+                        if self.mode == Mode.SPLIT_ALL:  # type: ignore
                             location = locations.setdefault(
                                 link.to_node,
                                 Location(
@@ -231,11 +231,11 @@ class SplitMergeGroupInput(BaseOperator):
                         verify_limits=True,
                     )
 
-                    if self.mode == Mode.LINK:  # type: ignore
+                    if self.mode == Mode.SPLIT_ALL:  # type: ignore
                         # location.y -= new_node.dimensions.y / bpy.context.preferences.system.ui_scale
                         location.y -= new_node.bl_height_min
                 new_node = cast("Node", new_node)
-                if self.mode != Mode.LINK:  # type: ignore
+                if self.mode != Mode.SPLIT_ALL:  # type: ignore
                     # location.y -= new_node.dimensions.y / bpy.context.preferences.system.ui_scale
                     location.y -= new_node.bl_height_min
 

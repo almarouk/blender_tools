@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-__all__ = ["RandomizeSeed"]
+__all__ = ["RandomizeSeed", "ResetSeeds"]
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+from ..utils.operators import BaseOperator
 from ..utils.handlers import BaseNodeTreeHandler
-from ..utils.nodes import is_socket_hidden, get_socket_location
+from ..utils.nodes import is_socket_hidden, get_socket_location, get_editable_node_tree
 from ..properties import get_custom_properties
 
 if TYPE_CHECKING:
@@ -16,14 +17,13 @@ if TYPE_CHECKING:
         NodeSocket,
         NodeSocketInt,
         NodeGroupInput,
-        FunctionNodeRandomValue,
-        FunctionNodeInputInt,
+        FunctionNodeHashValue,
+        Context,
     )
 
 TAG = "AutoSeedRandomizer"
 
-
-def get_seed_links(node_tree: NodeTree) -> list[NodeLink] | str:
+def check_node_tree(node_tree: NodeTree) -> str | None:
     if node_tree.interface is None:
         return "Node tree has no interface"
 
@@ -53,6 +53,7 @@ def get_seed_links(node_tree: NodeTree) -> list[NodeLink] | str:
     if not has_linked_seed_inputs:
         return "No linked seed inputs found"
 
+def get_seed_links(node_tree: NodeTree, poll: bool = False) -> list[NodeLink] | str:
     # Find all seed links in the node tree
     seed_links: list[NodeLink] = []
     for link in node_tree.links:
@@ -66,9 +67,11 @@ def get_seed_links(node_tree: NodeTree) -> list[NodeLink] | str:
             and link.to_node.bl_idname != "NodeReroute"
         ):  # and link.to_socket.name.strip().lower() == "seed":
             if not (
-                link.to_node.bl_idname == "FunctionNodeRandomValue"
-                and link.to_node.label == TAG
+                link.to_node.bl_idname == "FunctionNodeHashValue"
+                and link.to_node.label.endswith(TAG)
             ):
+                if poll:
+                    return []
                 seed_links.append(link)
 
     if not seed_links:
@@ -76,6 +79,12 @@ def get_seed_links(node_tree: NodeTree) -> list[NodeLink] | str:
 
     return seed_links
 
+def get_tagged_nodes(node_tree: NodeTree) -> list[Node]:
+    tagged_nodes: list[Node] = []
+    for node in node_tree.nodes:
+        if node.bl_idname == "FunctionNodeHashValue" and node.label.endswith(TAG):
+            tagged_nodes.append(node)
+    return tagged_nodes
 
 class RandomizeSeed(BaseNodeTreeHandler):
     """Randomize the seed value for the node tree."""
@@ -87,9 +96,13 @@ class RandomizeSeed(BaseNodeTreeHandler):
 
     @classmethod
     def _poll_node_tree(cls, node_tree: NodeTree):
-        result = get_seed_links(node_tree)
-        if isinstance(result, str):
-            return result
+        check = check_node_tree(node_tree)
+        if isinstance(check, str):
+            return check
+        links = get_seed_links(node_tree, poll=True)
+        if isinstance(links, str):
+            return links
+        return None
 
     def _execute_node_tree(self, node_tree: NodeTree):
         links = get_seed_links(node_tree)
@@ -106,8 +119,8 @@ class RandomizeSeed(BaseNodeTreeHandler):
             to_node: Node = link.to_node  # type: ignore
             to_socket: NodeSocket = link.to_socket  # type: ignore
             # Create Random Value node
-            random_node: FunctionNodeRandomValue = node_tree.nodes.new(
-                type="FunctionNodeRandomValue"
+            random_node: FunctionNodeHashValue = node_tree.nodes.new(
+                type="FunctionNodeHashValue"
             )  # type: ignore
             random_node.hide = True
             random_node.select = False
@@ -122,33 +135,12 @@ class RandomizeSeed(BaseNodeTreeHandler):
                 location[0] - random_node.width - 25,
                 location[1] + 15,
             )
-            random_node.label = TAG
+            random_node.label = f"{counter} {TAG}"
             random_node.data_type = "INT"
-            if to_node.parent:
-                random_node.parent = to_node.parent  # type: ignore
-
-            # Set default range for integer random values
-            socket: NodeSocketInt = random_node.inputs["Min"]  # type: ignore
-            socket.default_value = 0
-            socket: NodeSocketInt = random_node.inputs["Max"]  # type: ignore
-            socket.default_value = 1000000
-
-            # Add an Integer Value Node
-            int_value_node: FunctionNodeInputInt = node_tree.nodes.new(
-                type="FunctionNodeInputInt"
-            )  # type: ignore
-            int_value_node.hide = True
-            int_value_node.select = False
-            int_value_node.width = int_value_node.bl_width_min
-            int_value_node.location = (
-                random_node.location_absolute.x - int_value_node.width - 25,
-                random_node.location_absolute.y,
-            )
-            int_value_node.label = str(counter)
-            int_value_node.integer = counter
+            cast("NodeSocketInt", random_node.inputs["Value"]).default_value = counter
             counter = counter + 1
             if to_node.parent:
-                int_value_node.parent = to_node.parent  # type: ignore
+                random_node.parent = to_node.parent  # type: ignore
 
             # Add a Group Input Node with Seed shown only
             group_input_node: NodeGroupInput = node_tree.nodes.new(
@@ -163,10 +155,9 @@ class RandomizeSeed(BaseNodeTreeHandler):
                     socket_out.hide = False
                 else:
                     socket_out.hide = True
-            # group_input_node.location = (random_node.location.x - group_input_node.width - 25, int_value_node.location.y - int_value_node.dimensions.y / bpy.context.preferences.system.ui_scale - 5)
             group_input_node.location = (
                 random_node.location_absolute.x - group_input_node.width - 25,
-                int_value_node.location_absolute.y - int_value_node.bl_height_min - 5,
+                random_node.location_absolute.y,
             )
             if to_node.parent:
                 group_input_node.parent = to_node.parent  # type: ignore
@@ -178,12 +169,7 @@ class RandomizeSeed(BaseNodeTreeHandler):
                 verify_limits=True,
             )
             node_tree.links.new(
-                random_node.outputs["Value"], to_socket, verify_limits=True
-            )
-            node_tree.links.new(
-                int_value_node.outputs["Integer"],
-                random_node.inputs["ID"],
-                verify_limits=True,
+                random_node.outputs["Hash"], to_socket, verify_limits=True
             )
 
             # # Remove the original link
@@ -194,3 +180,44 @@ class RandomizeSeed(BaseNodeTreeHandler):
                 node_tree.nodes.remove(from_node)
 
         props.auto_seed_counter = counter
+
+class ResetSeeds(BaseOperator):
+    """Reset all seed randomizers in the node tree."""
+
+    bl_idname = "node.reset_seeds"
+    bl_label = "Reset Seeds"
+    bl_description = "Reset all seed randomizers in the node tree."
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def _poll(cls, context: Context):
+        node_tree = get_editable_node_tree(context=context)
+        if isinstance(node_tree, str):
+            return node_tree
+        props = get_custom_properties(node_tree)
+        if props is None:
+            return "Failed to get custom properties for node tree."
+        counter = props.auto_seed_counter
+        if counter == 0:
+            return "No seeds to reset."
+
+    def _execute(self, context: Context):
+        node_tree = get_editable_node_tree(context=context)
+        if isinstance(node_tree, str):
+            return node_tree
+
+        props = get_custom_properties(node_tree)
+        if props is None:
+            return "Failed to get custom properties for node tree."
+        # props.auto_seed_counter = 0
+        counter = 0
+
+        tagged_nodes = get_tagged_nodes(node_tree)
+        for node in tagged_nodes:
+            node.label = f"{counter} {TAG}"
+            cast("NodeSocketInt", node.inputs["Value"]).default_value = counter
+            counter = counter + 1
+
+        props.auto_seed_counter = counter
+
+        return None

@@ -20,7 +20,7 @@ from bpy.utils import register_class, unregister_class
 from .resize_node import HideResizeNode
 from .split_group_input import SplitMergeGroupInput
 from .rename_node import HideRenameSingleOutputNode
-from .randomize_seed import RandomizeSeed
+from .randomize_seed import RandomizeSeed, ResetSeeds
 from .match_group_interface import MatchGroupInterface
 
 if TYPE_CHECKING:
@@ -32,6 +32,7 @@ classes: tuple[type[BaseOperator], ...] = (
     HideRenameSingleOutputNode,
     MatchGroupInterface,
     RandomizeSeed,
+    ResetSeeds,
 )
 
 

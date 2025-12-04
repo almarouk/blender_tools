@@ -24,7 +24,7 @@ class OperatorMenu(Menu):
     @classmethod
     def poll(cls, context: Context) -> bool:
         return any(
-            not is_handler_operator(cls) and cls.poll_silent(context) for cls in classes
+            not is_handler_operator(cls) and cls.poll(context) for cls in classes
         )
 
     def draw(self, context: Context) -> None:
@@ -33,7 +33,7 @@ class OperatorMenu(Menu):
             return
         layout.operator_context = "INVOKE_DEFAULT"
         for cls in classes:
-            if not is_handler_operator(cls) and cls.poll_silent(context):
+            if not is_handler_operator(cls) and cls.poll(context):
                 layout.operator(cls.bl_idname)
 
 

@@ -4,7 +4,7 @@ __all__ = ["SplitMergeGroupInput"]
 
 from typing import cast, TYPE_CHECKING
 from bpy.props import BoolProperty, EnumProperty  # type: ignore
-from ..utils.operators import BaseOperator
+from ..utils.operators import BaseOperator, OperatorResult
 from ..utils.nodes import get_selected_nodes, find_common_parent
 from enum import StrEnum, auto
 from dataclasses import dataclass, field
@@ -92,7 +92,12 @@ class SplitMergeGroupInput(BaseOperator):
     def _execute(self, context: Context):
         nodes = get_selected_nodes(context, node_type="NodeGroupInput")
         if isinstance(nodes, str):
-            return nodes
+            return OperatorResult(
+                return_type={"CANCELLED"},
+                message_type={"ERROR"},
+                message=nodes,
+            )
+
         node_tree = cast(
             "NodeTree", cast("SpaceNodeEditor", context.space_data).edit_tree
         )
@@ -242,9 +247,14 @@ class SplitMergeGroupInput(BaseOperator):
         for node in nodes:
             node_tree.nodes.remove(node)
 
+        return OperatorResult(
+            return_type={"FINISHED"},
+        )
+
     def invoke(self, context: Context, event: Event):  # type: ignore
         wm = context.window_manager
         if not wm:
+            self.report({"ERROR"}, "No window manager found.")
             return {"CANCELLED"}
         return wm.invoke_props_popup(self, event)
 

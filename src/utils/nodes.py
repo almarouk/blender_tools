@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "check_nodetree_editable",
     "get_editable_node_tree",
     "get_selected_nodes",
     "find_common_parent",
@@ -99,6 +100,15 @@ def get_socket_location(
         print(f"Error getting socket location: {e}")
         return None
 
+def check_nodetree_editable(node_tree: NodeTree) -> str | None:
+    if not node_tree.is_editable:
+        return "Current node tree is not editable."
+    if cast("Library | None", node_tree.library) is not None:
+        return (
+            "Current node tree is linked from another .blend file and cannot be edited."
+        )
+
+
 def get_editable_node_tree(
     context: Context | None = None, name: str | None = None
 ) -> NodeTree | str:
@@ -122,12 +132,10 @@ def get_editable_node_tree(
     else:
         return "Cannot find node tree."
 
-    if not node_tree.is_editable:
-        return "Current node tree is not editable."
-    if cast("Library | None", node_tree.library) is not None:
-        return (
-            "Current node tree is linked from another .blend file and cannot be edited."
-        )
+    msg = check_nodetree_editable(node_tree)
+    if isinstance(msg, str):
+        return msg
+
     if cast("Nodes | None", node_tree.nodes) is None:
         return "Current node tree does not contain any nodes."
 

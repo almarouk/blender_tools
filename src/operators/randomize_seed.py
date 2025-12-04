@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-__all__ = ["RandomizeSeed", "ResetSeeds"]
+__all__ = ["RandomizeSeed"]
 
 from typing import TYPE_CHECKING, cast
-from ..utils.operators import BaseOperator
 from ..utils.handlers import BaseNodeTreeHandler
-from ..utils.nodes import is_socket_hidden, get_socket_location, get_editable_node_tree
+from ..utils.operators import OperatorResult
+from ..utils.nodes import is_socket_hidden, get_socket_location
 from ..properties import get_custom_properties
 
 if TYPE_CHECKING:
@@ -18,20 +18,33 @@ if TYPE_CHECKING:
         NodeSocketInt,
         NodeGroupInput,
         FunctionNodeHashValue,
-        Context,
     )
+    from ..properties import AutoSeedCounterProp
 
 TAG = "AutoSeedRandomizer"
 
-def check_node_tree(node_tree: NodeTree) -> str | None:
+def get_nodetree_props(node_tree: NodeTree) -> AutoSeedCounterProp | str:
+    props = get_custom_properties(node_tree)
+    if props is None:
+        return "Failed to get custom properties for node tree."
+    return props
+
+
+def get_seed_links_and_nodes(
+    node_tree: NodeTree,
+) -> tuple[list[NodeLink], list[Node]] | str:
+    props = get_nodetree_props(node_tree)
+    if isinstance(props, str):
+        return props
+
     if node_tree.interface is None:
         return "Node tree has no interface"
 
     # Check if the node tree has a seed input
     has_seed_input = False
-    for item in node_tree.interface.items_tree:  # type: ignore
+    for item in node_tree.interface.items_tree:
         if item.item_type == "SOCKET":
-            item: NodeTreeInterfaceSocket
+            item = cast("NodeTreeInterfaceSocket", item)
             if item.in_out == "INPUT" and item.name.strip().lower() == "seed":
                 has_seed_input = True
                 break
@@ -40,51 +53,41 @@ def check_node_tree(node_tree: NodeTree) -> str | None:
         return "Node tree has no seed input"
 
     has_linked_seed_inputs = False
+    seed_nodes: list[Node] = []
     for node in node_tree.nodes:
         if node.bl_idname == "NodeGroupInput":
             for socket in node.outputs:
                 if socket.name.strip().lower() == "seed":
                     if not is_socket_hidden(socket) and socket.is_linked:
                         has_linked_seed_inputs = True
-                    break
-        if has_linked_seed_inputs:
-            break
+        elif node.bl_idname == "FunctionNodeHashValue" and node.label.endswith(TAG):
+            seed_nodes.append(node)
 
-    if not has_linked_seed_inputs:
-        return "No linked seed inputs found"
-
-def get_seed_links(node_tree: NodeTree, poll: bool = False) -> list[NodeLink] | str:
     # Find all seed links in the node tree
     seed_links: list[NodeLink] = []
-    for link in node_tree.links:
-        if (
-            link.from_socket
-            and link.to_socket
-            and link.to_node
-            and link.from_node
-            and link.from_node.bl_idname == "NodeGroupInput"
-            and link.from_socket.name.strip().lower() == "seed"
-            and link.to_node.bl_idname != "NodeReroute"
-        ):  # and link.to_socket.name.strip().lower() == "seed":
-            if not (
-                link.to_node.bl_idname == "FunctionNodeHashValue"
-                and link.to_node.label.endswith(TAG)
-            ):
-                if poll:
-                    return []
-                seed_links.append(link)
 
-    if not seed_links:
-        return "No seed links found"
+    if has_linked_seed_inputs:
+        for link in node_tree.links:
+            if (
+                link.from_socket
+                and link.to_socket
+                and link.to_node
+                and link.from_node
+                and link.from_node.bl_idname == "NodeGroupInput"
+                and link.from_socket.name.strip().lower() == "seed"
+                and link.to_node.bl_idname != "NodeReroute"
+            ):  # and link.to_socket.name.strip().lower() == "seed":
+                if not (
+                    link.to_node.bl_idname == "FunctionNodeHashValue"
+                    and link.to_node.label.endswith(TAG)
+                ):
+                    seed_links.append(link)
 
-    return seed_links
+    if not (seed_links or seed_nodes):
+        return "No seed links or nodes found"
 
-def get_tagged_nodes(node_tree: NodeTree) -> list[Node]:
-    tagged_nodes: list[Node] = []
-    for node in node_tree.nodes:
-        if node.bl_idname == "FunctionNodeHashValue" and node.label.endswith(TAG):
-            tagged_nodes.append(node)
-    return tagged_nodes
+    return seed_links, seed_nodes
+
 
 class RandomizeSeed(BaseNodeTreeHandler):
     """Randomize the seed value for the node tree."""
@@ -94,26 +97,37 @@ class RandomizeSeed(BaseNodeTreeHandler):
     bl_description = "Randomize the seed value for the node tree."
     bl_options = {"REGISTER", "UNDO"}
 
-    @classmethod
-    def _poll_node_tree(cls, node_tree: NodeTree):
-        check = check_node_tree(node_tree)
-        if isinstance(check, str):
-            return check
-        links = get_seed_links(node_tree, poll=True)
-        if isinstance(links, str):
-            return links
-        return None
-
     def _execute_node_tree(self, node_tree: NodeTree):
-        links = get_seed_links(node_tree)
-        if isinstance(links, str):
-            return links
+        result = get_seed_links_and_nodes(node_tree)
+        if isinstance(result, str):
+            return OperatorResult(
+                return_type={"CANCELLED"},
+                message_type={"ERROR"},
+                message=result,
+            )
+        links, nodes = result
 
-        props = get_custom_properties(node_tree)
-        if props is None:
-            return "Failed to get custom properties for node tree."
+        props = get_nodetree_props(node_tree)
+        if isinstance(props, str):
+            return OperatorResult(
+                return_type={"CANCELLED"},
+                message_type={"ERROR"},
+                message=props,
+            )
 
-        counter = props.auto_seed_counter
+        is_changed = len(links) > 0
+
+        for i, node in enumerate(nodes):
+            label = f"{i} {TAG}"
+            if node.label != label:
+                is_changed = True
+                node.label = label
+            value_socket = cast("NodeSocketInt", node.inputs["Value"])
+            if value_socket.default_value != i:
+                is_changed = True
+                value_socket.default_value = i
+        counter = len(nodes)
+
         for link in links:
             from_node: NodeGroupInput = link.from_node  # type: ignore
             to_node: Node = link.to_node  # type: ignore
@@ -179,45 +193,14 @@ class RandomizeSeed(BaseNodeTreeHandler):
             if not any(socket.is_linked for socket in from_node.outputs):
                 node_tree.nodes.remove(from_node)
 
-        props.auto_seed_counter = counter
-
-class ResetSeeds(BaseOperator):
-    """Reset all seed randomizers in the node tree."""
-
-    bl_idname = "node.reset_seeds"
-    bl_label = "Reset Seeds"
-    bl_description = "Reset all seed randomizers in the node tree."
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def _poll(cls, context: Context):
-        node_tree = get_editable_node_tree(context=context)
-        if isinstance(node_tree, str):
-            return node_tree
-        props = get_custom_properties(node_tree)
-        if props is None:
-            return "Failed to get custom properties for node tree."
-        counter = props.auto_seed_counter
-        if counter == 0:
-            return "No seeds to reset."
-
-    def _execute(self, context: Context):
-        node_tree = get_editable_node_tree(context=context)
-        if isinstance(node_tree, str):
-            return node_tree
-
-        props = get_custom_properties(node_tree)
-        if props is None:
-            return "Failed to get custom properties for node tree."
-        # props.auto_seed_counter = 0
-        counter = 0
-
-        tagged_nodes = get_tagged_nodes(node_tree)
-        for node in tagged_nodes:
-            node.label = f"{counter} {TAG}"
-            cast("NodeSocketInt", node.inputs["Value"]).default_value = counter
-            counter = counter + 1
+        if not is_changed:
+            return OperatorResult(
+                return_type={"CANCELLED"},
+                message_type={"INFO"},
+                message="No changes made. Seed links and nodes are already randomized.",
+            )
 
         props.auto_seed_counter = counter
-
-        return None
+        return OperatorResult(
+            return_type={"FINISHED"},
+        )

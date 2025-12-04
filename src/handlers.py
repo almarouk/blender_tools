@@ -31,9 +31,8 @@ def call_operators(updated_trees: list[str]) -> None:
     for cls in handler_operators:
         if cls.bl_idname in active_handlers:
             for node_tree_name in updated_trees:
-                if cls.poll_node_tree(node_tree_name):
-                    op = operators.get_operator_func(cls.bl_idname)
-                    op(node_tree_name=node_tree_name)
+                op = operators.get_operator_func(cls.bl_idname)
+                op(node_tree_name=node_tree_name)
 
 
 @persistent

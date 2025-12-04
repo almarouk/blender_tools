@@ -2,10 +2,10 @@ from __future__ import annotations
 
 __all__ = ["BaseNodeTreeHandler", "is_handler_operator"]
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from abc import abstractmethod
 from .nodes import get_editable_node_tree
-from .operators import BaseOperator
+from .operators import BaseOperator, OperatorResult
 from bpy.props import StringProperty  # type: ignore
 
 if TYPE_CHECKING:
@@ -26,44 +26,34 @@ class BaseNodeTreeHandler(BaseOperator):
         node_tree_name: str = ""
 
     @abstractmethod
-    def _execute_node_tree(
-        self, node_tree: NodeTree
-    ) -> tuple[set[str], str] | set[str] | str | None: ...
+    def _execute_node_tree(self, node_tree: NodeTree) -> OperatorResult: ...
 
     @classmethod
-    @abstractmethod
-    def _poll_node_tree(cls, node_tree: NodeTree) -> str | None: ...
-
-    @classmethod
-    def poll_node_tree(cls, node_tree_name: str) -> bool:
-        node_tree = get_editable_node_tree(name=node_tree_name)
-        msg = (
-            node_tree if isinstance(node_tree, str) else cls._poll_node_tree(node_tree)
-        )
-        if isinstance(msg, str):
-            cls.poll_message_set(msg)
-            return False
-        return True
-
-    @classmethod
-    def _poll(cls, context: Context):
+    def _poll(cls, context: Context) -> str | None:
+        # return "Not available as a direct operator. Use as a handler."
         pass
-        # node_tree = get_node_tree(context)
-        # if isinstance(node_tree, str):
-        #     return node_tree
-        # msg = cls._poll_node_tree(node_tree)
-        # if isinstance(msg, str):
-        #     return msg
 
     def _execute(self, context: Context):
-        if self.node_tree_name:
+        is_called_as_handler = bool(self.node_tree_name)
+        if is_called_as_handler:
             node_tree = get_editable_node_tree(name=self.node_tree_name)
         else:
             node_tree = get_editable_node_tree(context=context)
-        msg = (
-            node_tree if isinstance(node_tree, str) else self._poll_node_tree(node_tree)
-        )
-        if isinstance(msg, str):
-            self.poll_message_set(msg)
-            return msg
-        self._execute_node_tree(cast("NodeTree", node_tree))
+        if isinstance(node_tree, str):
+            if is_called_as_handler:
+                return OperatorResult(
+                    return_type={"CANCELLED"},
+                )
+            else:
+                return OperatorResult(
+                    return_type={"CANCELLED"},
+                    message_type={"ERROR"},
+                    message=node_tree,
+                )
+
+        res = self._execute_node_tree(node_tree)
+        if is_called_as_handler:
+            res.message_type = None
+            res.message = None
+            # self.report({"INFO"}, f"Handler executed: {self.bl_label}")
+        return res

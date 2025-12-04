@@ -3,8 +3,11 @@ from __future__ import annotations
 __all__ = ["MatchGroupInterface"]
 
 from typing import cast, TYPE_CHECKING, Iterable
-from ..utils.operators import BaseOperator
-from ..utils.nodes import get_editable_node_tree, get_selected_nodes
+from ..utils.operators import BaseOperator, OperatorResult
+from ..utils.nodes import (
+    get_selected_nodes,
+    check_nodetree_editable,
+)
 
 if TYPE_CHECKING:
     from bpy.types import (
@@ -16,6 +19,7 @@ if TYPE_CHECKING:
         NodeTreeInterfaceSocket,
         NodeTreeInterfacePanel,
         bpy_prop_collection,
+        SpaceNodeEditor,
     )
 
     class _NodeTreeInterfaceItem(NodeTreeInterfaceItem):
@@ -37,7 +41,7 @@ if TYPE_CHECKING:
         parent: _NodeTreeInterfacePanel  # type: ignore
 
 
-def get_nodes(context: Context) -> Iterable[_NodeGroup] | str:
+def get_editable_nodegroups(context: Context) -> Iterable[_NodeGroup] | str:
     nodes = get_selected_nodes(
         context,
         node_type=[
@@ -53,7 +57,9 @@ def get_nodes(context: Context) -> Iterable[_NodeGroup] | str:
     nodes = [
         node
         for node in nodes
-        if node.node_tree and not node.node_tree.library and node.node_tree.interface
+        if node.node_tree
+        and check_nodetree_editable(node.node_tree) is None
+        and node.node_tree.interface
     ]
     if not nodes:
         return "No editable Group nodes selected."
@@ -106,18 +112,22 @@ class MatchGroupInterface(BaseOperator):
 
     @classmethod
     def _poll(cls, context: Context):
-        result = get_nodes(context)
+        result = get_editable_nodegroups(context)
         if isinstance(result, str):
             return result
 
     def _execute(self, context: Context):
-        node_tree = get_editable_node_tree(context=context)
-        if isinstance(node_tree, str):
-            return node_tree
-        nodes = get_nodes(context)
+        nodes = get_editable_nodegroups(context)
         if isinstance(nodes, str):
-            return nodes
+            return OperatorResult(
+                return_type={"CANCELLED"},
+                message_type={"ERROR"},
+                message=nodes,
+            )
 
+        node_tree = cast(
+            "NodeTree", cast("SpaceNodeEditor", context.space_data).edit_tree
+        )
         node_tree = cast("_NodeTree", node_tree)
 
         # Map source socket IDs to the set of panel IDs they are contained in
@@ -202,3 +212,7 @@ class MatchGroupInterface(BaseOperator):
             ]
             for item in reversed(panels_to_delete):
                 node.node_tree.interface.remove(item, move_content_to_parent=False)
+
+        return OperatorResult(
+            return_type={"FINISHED"},
+        )
